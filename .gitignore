@@ -1,0 +1,15 @@
+# Never upload venv
+venv/
+.venv/
+
+# PyTorch caches
+__pycache__/
+*.pyc
+
+# IDE noise
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
