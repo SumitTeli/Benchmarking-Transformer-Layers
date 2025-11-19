@@ -1,166 +1,167 @@
+import os
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-import os, sys
 
-sns.set(style="whitegrid", font_scale=1.2)
+sns.set(style="whitegrid", font_scale=1.3)
 
-ROOT = sys.argv[1]
+ROOT = "results"
 
 lat_list = []
 mem_list = []
 
-# -----------------------------
-# Load data for each device
-# -----------------------------
-for folder in os.listdir(ROOT):
-    path = os.path.join(ROOT, folder)
+# -------------------------------------------------------------------
+# 1. READ ALL DEVICE FOLDERS
+# -------------------------------------------------------------------
+for device_folder in os.listdir(ROOT):
+    path = os.path.join(ROOT, device_folder)
     if not os.path.isdir(path):
         continue
 
-    lat_path = os.path.join(path, "latency_flops_results.csv")
-    mem_path = os.path.join(path, "memory_bottlenecks.csv")
+    lat_file = os.path.join(path, "latency_flops_results.csv")
+    mem_file = os.path.join(path, "memory_bottlenecks.csv")
 
-    if not os.path.exists(lat_path):
-        continue
+    if os.path.exists(lat_file):
+        df_lat = pd.read_csv(lat_file)
+        df_lat["device"] = device_folder
+        lat_list.append(df_lat)
 
-    lat = pd.read_csv(lat_path)
-    lat["device"] = folder
-    lat_list.append(lat)
+    if os.path.exists(mem_file):
+        df_mem = pd.read_csv(mem_file)
+        df_mem["device"] = device_folder
+        mem_list.append(df_mem)
 
-    mem = pd.read_csv(mem_path)
-    mem["device"] = folder
-    mem_list.append(mem)
+# MERGED DATA
+lat = pd.concat(lat_list, ignore_index=True)
+mem = pd.concat(mem_list, ignore_index=True) if mem_list else None
 
-lat_all = pd.concat(lat_list)
-mem_all = pd.concat(mem_list)
+# Clean
+lat["seq_len"] = lat["seq_len"].astype(int)
+lat["batch"] = lat["batch"].astype(int)
+lat["model_size"] = lat["model_size"].astype(str)
 
-# Device color scheme
-device_palette = {
-    "cpu": "red",
-    "gpu-1650": "green",
-    "gpu-5060": "blue",
-    "mac": "orange"
-}
 
-# ----------------------------------------------------
-# 1. LATENCY vs SEQ_LEN (3 SUBPLOTS BY BATCH SIZE)
-# ----------------------------------------------------
-batches = sorted(lat_all["batch"].unique())
-fig, axs = plt.subplots(1, 3, figsize=(20,6), sharey=True)
-
-for ax, b in zip(axs, batches):
-    df = lat_all[lat_all["batch"] == b]
-    sns.lineplot(
-        data=df,
-        x="seq_len",
-        y="mean_latency_sec",
-        hue="device",
-        palette=device_palette,
-        marker="o",
-        ax=ax
-    )
-    ax.set_title(f"Latency (Batch={b})")
-    ax.set_xlabel("Sequence Length")
-    ax.set_ylabel("Latency (s)")
-
-plt.suptitle("Global Latency vs Sequence Length", fontsize=18)
-plt.tight_layout()
-plt.savefig("global_latency.png")
-plt.close()
-
-# ----------------------------------------------------
-# 2. THROUGHPUT (3 SUBPLOTS)
-# ----------------------------------------------------
-fig, axs = plt.subplots(1, 3, figsize=(20,6), sharey=True)
-
-for ax, b in zip(axs, batches):
-    df = lat_all[lat_all["batch"] == b]
-    sns.lineplot(
-        data=df,
-        x="seq_len",
-        y="throughput_tokens_sec",
-        hue="device",
-        palette=device_palette,
-        marker="o",
-        ax=ax
-    )
-    ax.set_title(f"Throughput (Batch={b})")
-    ax.set_xlabel("Sequence Length")
-    ax.set_ylabel("Tokens/sec")
-
-plt.suptitle("Global Throughput Comparison", fontsize=18)
-plt.tight_layout()
-plt.savefig("global_throughput.png")
-plt.close()
-
-# ----------------------------------------------------
-# 3. Achieved TFLOPs (BAR CHART)
-# ----------------------------------------------------
-plt.figure(figsize=(10,6))
+# -------------------------------------------------------------------
+# 2. GLOBAL LATENCY COMPARISON (BAR CHART)
+# -------------------------------------------------------------------
+plt.figure(figsize=(12,7))
 sns.barplot(
-    data=lat_all,
-    x="device",
-    y="achieved_tflops",
-    hue="model_size",
-    palette=device_palette
+    data=lat,
+    x="seq_len",
+    y="mean_latency_sec",
+    hue="device",
+    errorbar=None
 )
-plt.title("Achieved TFLOPs by Device")
-plt.ylabel("TFLOPs/s")
-plt.savefig("global_tflops.png")
-plt.close()
-
-# ----------------------------------------------------
-# 4. p95 Latency (BAR CHART)
-# ----------------------------------------------------
-plt.figure(figsize=(10,6))
-sns.barplot(
-    data=lat_all,
-    x="device",
-    y="p95_sec",
-    hue="seq_len",
-    palette=device_palette
-)
-plt.title("p95 Latency Comparison")
+plt.title("Global Latency Comparison (Mean Latency)")
+plt.xlabel("Sequence Length")
 plt.ylabel("Latency (s)")
-plt.savefig("global_p95.png")
+plt.tight_layout()
+plt.savefig("global_latency_compare.png")
 plt.close()
 
-# ----------------------------------------------------
-# 5. FLOPs Efficiency (%)
-# ----------------------------------------------------
-lat_all["est_tflops"] = lat_all["estimated_flops"] / 1e12
-lat_all["flops_eff"] = (lat_all["achieved_tflops"] / lat_all["est_tflops"]) * 100
 
-plt.figure(figsize=(10,6))
+# -------------------------------------------------------------------
+# 3. GLOBAL THROUGHPUT COMPARISON
+# -------------------------------------------------------------------
+plt.figure(figsize=(12,7))
 sns.barplot(
-    data=lat_all,
-    x="device",
-    y="flops_eff",
-    hue="model_size",
-    palette=device_palette
+    data=lat,
+    x="seq_len",
+    y="throughput_tokens_sec",
+    hue="device",
+    errorbar=None
 )
-plt.title("FLOPs Efficiency (%) by Device")
-plt.ylabel("Efficiency (%)")
-plt.savefig("global_flops_eff.png")
+plt.title("Global Throughput Comparison")
+plt.xlabel("Sequence Length")
+plt.ylabel("Tokens/sec")
+plt.tight_layout()
+plt.savefig("global_throughput_compare.png")
 plt.close()
 
-# ----------------------------------------------------
-# 6. MEMORY UTILIZATION (ONLY GPUs)
-# ----------------------------------------------------
-gpu_mem = mem_all[mem_all["total_vram"] != "Unified Memory"].copy()
-if len(gpu_mem) > 0:
-    gpu_mem["util"] = gpu_mem["utilization_pct"].str.replace("%","").astype(float)
 
-    plt.figure(figsize=(10,6))
-    sns.barplot(
-        data=gpu_mem,
-        x="device",
-        y="util",
-        hue="seq_len",
-        palette=device_palette
-    )
-    plt.title("GPU Memory Utilization (%)")
-    plt.ylabel("Percent VRAM Used")
-    plt.savefig("global_memory.png")
-    plt.close()
+# -------------------------------------------------------------------
+# 4. GLOBAL TFLOPs Comparison (Bar Chart)
+# -------------------------------------------------------------------
+plt.figure(figsize=(12,7))
+sns.barplot(
+    data=lat,
+    x="model_size",
+    y="achieved_tflops",
+    hue="device",
+    errorbar=None
+)
+plt.title("Global TFLOPs Comparison Across Devices")
+plt.ylabel("TFLOPs/s")
+plt.tight_layout()
+plt.savefig("global_tflops_compare.png")
+plt.close()
+
+
+# -------------------------------------------------------------------
+# 5. GLOBAL LATENCY HEATMAP (device × seq_len)
+# -------------------------------------------------------------------
+heat_latency = lat.pivot_table(
+    index="device",
+    columns="seq_len",
+    values="mean_latency_sec"
+)
+
+plt.figure(figsize=(12,6))
+sns.heatmap(
+    heat_latency,
+    annot=True,
+    cmap="YlOrRd",
+    fmt=".2f"
+)
+plt.title("Latency Heatmap (Device × Seq Len)")
+plt.tight_layout()
+plt.savefig("global_latency_heatmap.png")
+plt.close()
+
+
+# -------------------------------------------------------------------
+# 6. GLOBAL THROUGHPUT HEATMAP
+# -------------------------------------------------------------------
+heat_tp = lat.pivot_table(
+    index="device",
+    columns="seq_len",
+    values="throughput_tokens_sec"
+)
+
+plt.figure(figsize=(12,6))
+sns.heatmap(
+    heat_tp,
+    annot=True,
+    cmap="YlGnBu",
+    fmt=".0f"
+)
+plt.title("Throughput Heatmap (Device × Seq Len)")
+plt.tight_layout()
+plt.savefig("global_throughput_heatmap.png")
+plt.close()
+
+
+# -------------------------------------------------------------------
+# 7. VRAM UTILIZATION (GPU Only)
+# -------------------------------------------------------------------
+if mem is not None:
+    mem_gpu = mem[mem["total_vram"] != "Unified Memory"]
+
+    if not mem_gpu.empty:
+        mem_gpu["util_pct"] = mem_gpu["utilization_pct"].str.replace("%","").astype(float)
+
+        plt.figure(figsize=(12,7))
+        sns.barplot(
+            data=mem_gpu,
+            x="device",
+            y="util_pct",
+            hue="seq_len",
+            errorbar=None
+        )
+        plt.title("GPU VRAM Utilization (%) Across Devices")
+        plt.ylabel("VRAM Used (%)")
+        plt.tight_layout()
+        plt.savefig("global_vram_utilization.png")
+        plt.close()
+
+print("✓ GLOBAL COMPARISON PLOTS GENERATED SUCCESSFULLY!")
