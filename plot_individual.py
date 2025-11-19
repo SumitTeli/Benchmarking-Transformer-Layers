@@ -141,3 +141,87 @@ plt.savefig(f"{device_name}_tflops.png")
 plt.close()
 
 print("✓ ALL clean and simple visualizations generated!")
+
+# -------------------------------------------------------------
+# 7. MEMORY VISUALIZATIONS (if memory_bottlenecks.csv present)
+# -------------------------------------------------------------
+MEM_FILE = "memory_bottlenecks.csv"
+
+if os.path.exists(MEM_FILE):
+    mem = pd.read_csv(MEM_FILE)
+
+    # Assume the memory file belongs to this device/folder — clean fields
+    if "utilization_pct" in mem.columns:
+        mem = mem.copy()
+        mem["util"] = mem["utilization_pct"].astype(str).str.replace("%", "").str.strip()
+        mem["util"] = pd.to_numeric(mem["util"], errors="coerce")
+
+    if "peak_allocated" in mem.columns:
+        mem["peak_allocated_mb"] = (
+            mem["peak_allocated"].astype(str)
+            .str.replace(r"[^0-9.]", "", regex=True)
+            .replace("", "0")
+            .astype(float)
+        )
+
+    # Memory utilization bar (seq_len × batch)
+    if "util" in mem.columns:
+        plt.figure(figsize=(10,6))
+        sns.barplot(
+            data=mem,
+            x="seq_len",
+            y="util",
+            hue="batch",
+            palette="Set2",
+            errorbar=None
+        )
+        plt.title(f"{device_name} — Memory Utilization (%)")
+        plt.xlabel("Sequence Length")
+        plt.ylabel("Memory Utilization (%)")
+        plt.tight_layout()
+        plt.savefig(f"{device_name}_memory_utilization.png")
+        plt.close()
+
+    # Peak allocated memory bar (MiB)
+    if "peak_allocated_mb" in mem.columns:
+        plt.figure(figsize=(10,6))
+        sns.barplot(
+            data=mem,
+            x="seq_len",
+            y="peak_allocated_mb",
+            hue="batch",
+            palette="Paired",
+            errorbar=None
+        )
+        plt.title(f"{device_name} — Peak Allocated Memory (MiB)")
+        plt.xlabel("Sequence Length")
+        plt.ylabel("Peak Allocated (MiB)")
+        plt.tight_layout()
+        plt.savefig(f"{device_name}_memory_peak_allocated.png")
+        plt.close()
+
+    # Heatmap of utilization (batch × seq_len)
+    if "util" in mem.columns:
+        try:
+            heat_mem = mem.pivot_table(index="batch", columns="seq_len", values="util")
+            plt.figure(figsize=(10,6))
+            sns.heatmap(
+                heat_mem,
+                annot=True,
+                fmt=".1f",
+                cmap="YlGnBu",
+                linewidths=.5
+            )
+            plt.title(f"{device_name} — Memory Utilization Heatmap (%)")
+            plt.xlabel("Sequence Length")
+            plt.ylabel("Batch Size")
+            plt.tight_layout()
+            plt.savefig(f"{device_name}_memory_heatmap.png")
+            plt.close()
+        except Exception:
+            # If pivoting fails (e.g., non-numeric batches/seqs), skip heatmap
+            pass
+
+    print("✓ Memory visualizations generated (from memory_bottlenecks.csv).")
+else:
+    print("No memory_bottlenecks.csv found — skipping memory visualizations.")
