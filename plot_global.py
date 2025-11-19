@@ -1,18 +1,18 @@
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
+import matplotlib.pyplot as plt
 import os, sys
 
-sns.set(style="whitegrid")
+sns.set(style="whitegrid", font_scale=1.2)
 
 ROOT = sys.argv[1]
 
 lat_list = []
 mem_list = []
 
-# ---------------------------------------
-# Load all device CSVs
-# ---------------------------------------
+# -----------------------------
+# Load data for each device
+# -----------------------------
 for folder in os.listdir(ROOT):
     path = os.path.join(ROOT, folder)
     if not os.path.isdir(path):
@@ -25,125 +25,142 @@ for folder in os.listdir(ROOT):
         continue
 
     lat = pd.read_csv(lat_path)
-    lat["device_label"] = folder
+    lat["device"] = folder
     lat_list.append(lat)
 
     mem = pd.read_csv(mem_path)
-    mem["device_label"] = folder
+    mem["device"] = folder
     mem_list.append(mem)
 
-lat_all = pd.concat(lat_list, ignore_index=True)
-mem_all = pd.concat(mem_list, ignore_index=True)
+lat_all = pd.concat(lat_list)
+mem_all = pd.concat(mem_list)
 
-print("Loaded devices:", lat_all["device_label"].unique())
+# Device color scheme
+device_palette = {
+    "cpu": "red",
+    "gpu-1650": "green",
+    "gpu-5060": "blue",
+    "mac": "orange"
+}
 
-# ==============================================================
-#     1. LATENCY VS SEQ LEN
-# ==============================================================
-plt.figure(figsize=(12,7))
-sns.lineplot(
-    data=lat_all,
-    x="seq_len",
-    y="mean_latency_sec",
-    hue="device_label",
-    style="batch",
-    markers=True
-)
-plt.title("Global Latency vs Sequence Length")
-plt.savefig("global_latency_vs_seq.png")
+# ----------------------------------------------------
+# 1. LATENCY vs SEQ_LEN (3 SUBPLOTS BY BATCH SIZE)
+# ----------------------------------------------------
+batches = sorted(lat_all["batch"].unique())
+fig, axs = plt.subplots(1, 3, figsize=(20,6), sharey=True)
+
+for ax, b in zip(axs, batches):
+    df = lat_all[lat_all["batch"] == b]
+    sns.lineplot(
+        data=df,
+        x="seq_len",
+        y="mean_latency_sec",
+        hue="device",
+        palette=device_palette,
+        marker="o",
+        ax=ax
+    )
+    ax.set_title(f"Latency (Batch={b})")
+    ax.set_xlabel("Sequence Length")
+    ax.set_ylabel("Latency (s)")
+
+plt.suptitle("Global Latency vs Sequence Length", fontsize=18)
+plt.tight_layout()
+plt.savefig("global_latency.png")
 plt.close()
 
-# ==============================================================
-#     2. LATENCY VS BATCH SIZE
-# ==============================================================
-plt.figure(figsize=(12,7))
-sns.lineplot(
-    data=lat_all,
-    x="batch",
-    y="mean_latency_sec",
-    hue="device_label",
-    style="seq_len",
-    markers=True
-)
-plt.title("Global Latency vs Batch Size")
-plt.savefig("global_latency_vs_batch.png")
-plt.close()
+# ----------------------------------------------------
+# 2. THROUGHPUT (3 SUBPLOTS)
+# ----------------------------------------------------
+fig, axs = plt.subplots(1, 3, figsize=(20,6), sharey=True)
 
-# ==============================================================
-#     3. p50/p95 Comparison
-# ==============================================================
-plt.figure(figsize=(12,7))
-sns.barplot(
-    data=lat_all,
-    x="device_label",
-    y="p95_sec",
-    hue="model_size"
-)
-plt.title("Global p95 Latency")
-plt.savefig("global_p95.png")
-plt.close()
+for ax, b in zip(axs, batches):
+    df = lat_all[lat_all["batch"] == b]
+    sns.lineplot(
+        data=df,
+        x="seq_len",
+        y="throughput_tokens_sec",
+        hue="device",
+        palette=device_palette,
+        marker="o",
+        ax=ax
+    )
+    ax.set_title(f"Throughput (Batch={b})")
+    ax.set_xlabel("Sequence Length")
+    ax.set_ylabel("Tokens/sec")
 
-# ==============================================================
-#     4. THROUGHPUT
-# ==============================================================
-plt.figure(figsize=(12,7))
-sns.lineplot(
-    data=lat_all,
-    x="seq_len",
-    y="throughput_tokens_sec",
-    hue="device_label",
-    style="batch"
-)
-plt.title("Global Throughput Comparison")
+plt.suptitle("Global Throughput Comparison", fontsize=18)
+plt.tight_layout()
 plt.savefig("global_throughput.png")
 plt.close()
 
-# ==============================================================
-#     5. Achieved TFLOPs
-# ==============================================================
-plt.figure(figsize=(12,7))
+# ----------------------------------------------------
+# 3. Achieved TFLOPs (BAR CHART)
+# ----------------------------------------------------
+plt.figure(figsize=(10,6))
 sns.barplot(
     data=lat_all,
-    x="device_label",
+    x="device",
     y="achieved_tflops",
-    hue="model_size"
+    hue="model_size",
+    palette=device_palette
 )
-plt.title("Global Achieved TFLOPs")
+plt.title("Achieved TFLOPs by Device")
+plt.ylabel("TFLOPs/s")
 plt.savefig("global_tflops.png")
 plt.close()
 
-# ==============================================================
-#     6. FLOPs Efficiency %
-# ==============================================================
-lat_all["flops_eff"] = (lat_all["achieved_tflops"] / (lat_all["estimated_flops"] / 1e12)) * 100
-
-plt.figure(figsize=(12,7))
+# ----------------------------------------------------
+# 4. p95 Latency (BAR CHART)
+# ----------------------------------------------------
+plt.figure(figsize=(10,6))
 sns.barplot(
     data=lat_all,
-    x="device_label",
-    y="flops_eff",
-    hue="model_size"
+    x="device",
+    y="p95_sec",
+    hue="seq_len",
+    palette=device_palette
 )
-plt.title("FLOPs Efficiency (%)")
-plt.savefig("global_flops_efficiency.png")
+plt.title("p95 Latency Comparison")
+plt.ylabel("Latency (s)")
+plt.savefig("global_p95.png")
 plt.close()
 
-# ==============================================================
-#     7. MEMORY UTILIZATION (GPU ONLY)
-# ==============================================================
+# ----------------------------------------------------
+# 5. FLOPs Efficiency (%)
+# ----------------------------------------------------
+lat_all["est_tflops"] = lat_all["estimated_flops"] / 1e12
+lat_all["flops_eff"] = (lat_all["achieved_tflops"] / lat_all["est_tflops"]) * 100
+
+plt.figure(figsize=(10,6))
+sns.barplot(
+    data=lat_all,
+    x="device",
+    y="flops_eff",
+    hue="model_size",
+    palette=device_palette
+)
+plt.title("FLOPs Efficiency (%) by Device")
+plt.ylabel("Efficiency (%)")
+plt.savefig("global_flops_eff.png")
+plt.close()
+
+# ----------------------------------------------------
+# 6. MEMORY UTILIZATION (ONLY GPUs)
+# ----------------------------------------------------
 gpu_mem = mem_all[mem_all["total_vram"] != "Unified Memory"].copy()
 if len(gpu_mem) > 0:
     gpu_mem["util"] = gpu_mem["utilization_pct"].str.replace("%","").astype(float)
 
-    plt.figure(figsize=(12,7))
+    plt.figure(figsize=(10,6))
     sns.barplot(
         data=gpu_mem,
-        x="device_label",
+        x="device",
         y="util",
-        hue="seq_len"
+        hue="seq_len",
+        palette=device_palette
     )
-    plt.title("Global Memory Utilization (%) – GPUs Only")
-    plt.savefig("global_memory_usage.png")
+    plt.title("GPU Memory Utilization (%)")
+    plt.ylabel("Percent VRAM Used")
+    plt.savefig("global_memory.png")
     plt.close()
-
-print("✓ All global comparison plots generated.")
