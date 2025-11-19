@@ -1,8 +1,0 @@
-torch
-torchvision
-torchaudio
-numpy
-pandas
-tqdm
-#Install CUDA version manually after running the requirements file:
-#pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
