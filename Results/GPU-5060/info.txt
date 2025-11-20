@@ -1,0 +1,18 @@
+===== SYSTEM INFORMATION =====
+OS: Windows 11
+Machine: AMD64
+
+===== CPU =====
+CPU Model: Intel64 Family 6 Model 183 Stepping 1, GenuineIntel
+Cores: 20 physical / 28 logical
+
+===== MEMORY =====
+Total RAM: 31.79 GB
+
+===== GPU =====
+CUDA Available: YES (1 GPU(s))
+
+GPU #0: NVIDIA GeForce RTX 5060
+  CUDA Capability: (12, 0)
+  VRAM: 7.96 GB
+  Multiprocessors: 30
