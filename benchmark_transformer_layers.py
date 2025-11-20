@@ -5,7 +5,7 @@ import pandas as pd
 from tqdm import tqdm
 
 # -----------------------------------------------------------
-# DEVICE DETECTION
+# DEVICE DETECTION AND SYNCHRONIZATION
 # -----------------------------------------------------------
 def detect_device():
     if torch.cuda.is_available():
@@ -16,10 +16,11 @@ def detect_device():
         return torch.device("cpu")
 
 device = detect_device()
-print(f"\nRunning on: {device}\n")
+device_name = str(device)
+print(f"\nRunning on: {device_name}\n")
 
 # -----------------------------------------------------------
-# VIT TRANSFORMER-ENCODER LAYER
+# VIT TRANSFORMER-ENCODER LAYER (No Change)
 # -----------------------------------------------------------
 class ViTEncoderLayer(torch.nn.Module):
     def __init__(self, d_model, nhead, dim_ff):
@@ -37,16 +38,19 @@ class ViTEncoderLayer(torch.nn.Module):
         return self.layer(x)
 
 # -----------------------------------------------------------
-# FLOPs ESTIMATION (Attention + FFN)
+# FLOPs ESTIMATION (No Change)
 # -----------------------------------------------------------
 def estimate_flops(seq_len, d_model, ff_dim):
+    # Attn Proj: 4 * (D*D) * S
     attn_proj = 4 * seq_len * (d_model * d_model)
+    # Attn Scores: QK^T and Attention Output (2 * S*S*D)
     attn_scores = 2 * (seq_len * seq_len * d_model)
+    # FFN: 2 * (D*F) * S
     ffn = 2 * seq_len * (d_model * ff_dim)
     return attn_proj + attn_scores + ffn
 
 # -----------------------------------------------------------
-# MEMORY MEASUREMENT
+# MEMORY MEASUREMENT (No Change)
 # -----------------------------------------------------------
 def measure_memory():
     if device.type != "cuda":
@@ -71,7 +75,7 @@ def measure_memory():
         "utilization_pct": f"{utilization:.1f} %",
     }
 
-# PRECISION MODES
+# PRECISION MODES (No Change)
 def get_precision_modes():
     if device.type == "cuda":
         return ["fp32", "fp16"]
@@ -81,7 +85,7 @@ def get_precision_modes():
 precision_modes = get_precision_modes()
 
 # -----------------------------------------------------------
-# BENCHMARK CONFIG
+# BENCHMARK CONFIG (No Change)
 # -----------------------------------------------------------
 model_sizes = [
     {"name": "Small", "d": 384, "h": 6, "ff": 1536},
@@ -99,7 +103,7 @@ lat_results = []
 mem_results = []
 
 # -----------------------------------------------------------
-# MAIN BENCHMARK LOOP
+# MAIN BENCHMARK LOOP (Timing Updated)
 # -----------------------------------------------------------
 for cfg in model_sizes:
     for precision in precision_modes:
@@ -117,6 +121,11 @@ for cfg in model_sizes:
 
                 if device.type == "cuda":
                     torch.cuda.reset_peak_memory_stats()
+                
+                # Setup events for CUDA timing
+                if device.type == "cuda":
+                    start_event = torch.cuda.Event(enable_timing=True)
+                    end_event = torch.cuda.Event(enable_timing=True)
 
                 # Warmup
                 for _ in range(num_warmup):
@@ -126,15 +135,25 @@ for cfg in model_sizes:
                 total_tokens = seq_len * batch
 
                 # Timed iterations
-                for _ in tqdm(range(num_iters), desc=f"{cfg['name']} B{batch} S{seq_len}"):
-                    start = time.time()
-                    _ = layer(x)
+                pbar = tqdm(range(num_iters), desc=f"{cfg['name']} {precision} B{batch} S{seq_len}")
+                for _ in pbar:
                     if device.type == "cuda":
+                        start_event.record()
+                        _ = layer(x)
+                        end_event.record()
                         torch.cuda.synchronize()
-                    if device.type == "mps":
-                        torch.mps.synchronize()
-                    end = time.time()
-                    latencies.append(end - start)
+                        
+                        # Time measured in milliseconds, convert to seconds
+                        duration_sec = start_event.elapsed_time(end_event) / 1000.0
+                    else:
+                        start = time.time()
+                        _ = layer(x)
+                        if device.type == "mps":
+                            torch.mps.synchronize()
+                        end = time.time()
+                        duration_sec = end - start
+                        
+                    latencies.append(duration_sec)
 
                 avg_lat = float(np.mean(latencies))
                 p50_lat = float(np.percentile(latencies, 50))
@@ -144,12 +163,13 @@ for cfg in model_sizes:
 
                 # FLOPs
                 total_flops = estimate_flops(seq_len, cfg["d"], cfg["ff"]) * batch
+                # TFLOPS = (FLOPs / Latency) / 1e12
                 achieved_tflops = (total_flops / avg_lat) / 1e12
 
                 # Memory
                 mem = measure_memory()
                 mem_results.append({
-                    "device": str(device),
+                    "device": device_name,
                     "model": cfg["name"],
                     "precision": precision,
                     "seq_len": seq_len,
@@ -159,7 +179,7 @@ for cfg in model_sizes:
 
                 # Save latency + FLOPs
                 lat_results.append({
-                    "device": str(device),
+                    "device": device_name,
                     "model_size": cfg["name"],
                     "precision": precision,
                     "seq_len": seq_len,
