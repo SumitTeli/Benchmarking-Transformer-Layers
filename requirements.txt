@@ -4,5 +4,7 @@ torchaudio
 numpy
 pandas
 tqdm
+# psutil: cross-platform system and process utilities
+psutil
 #Install CUDA version manually after running the requirements file:
 #pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
