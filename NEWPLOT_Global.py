@@ -10,13 +10,12 @@ ROOT = "results"
 lat_list = []
 mem_list = []
 
-# Check if results directory exists
-if not os.path.isdir(ROOT):
-    raise FileNotFoundError(f"Results directory '{ROOT}' not found. Please create it and place device folders inside.")
-
 # -------------------------------------------------------------------
 # 1. READ AND CONCATENATE ALL DEVICE FOLDERS
 # -------------------------------------------------------------------
+if not os.path.isdir(ROOT):
+    raise FileNotFoundError(f"Results directory '{ROOT}' not found. Please create it and place device folders inside.")
+
 for device_folder in os.listdir(ROOT):
     path = os.path.join(ROOT, device_folder)
     if not os.path.isdir(path):
@@ -63,7 +62,7 @@ plt.title("Global Latency Comparison (Mean Latency by Seq Len)")
 plt.xlabel("Sequence Length")
 plt.ylabel("Latency (s)")
 plt.tight_layout()
-plt.savefig("global_latency_compare_seq.png")
+plt.savefig("global_P2_latency_compare_seq.png")
 plt.close()
 
 
@@ -82,13 +81,14 @@ plt.title("Global Throughput Comparison (Tokens/sec by Seq Len)")
 plt.xlabel("Sequence Length")
 plt.ylabel("Tokens/sec")
 plt.tight_layout()
-plt.savefig("global_throughput_compare_seq.png")
+plt.savefig("global_P3_throughput_compare_seq.png")
 plt.close()
 
 
 # -------------------------------------------------------------------
 # 4. GLOBAL TFLOPs Comparison (FACET GRID) - BEST EFFICIENCY PLOT
 # -------------------------------------------------------------------
+print("Plot 4/7: TFLOPs Facet Grid...")
 g = sns.catplot(
     data=lat,
     x="model_size",
@@ -101,18 +101,19 @@ g = sns.catplot(
     height=6,
     aspect=0.8
 )
-g.fig.suptitle("TFLOPs Comparison by Precision and Model Size", y=1.02, fontsize=16)
+g.fig.suptitle("Global TFLOPs Comparison by Precision and Model Size", y=1.02, fontsize=16)
 g.set_axis_labels("Model Size", "Achieved TFLOPs/s")
 g.set_titles(col_template="{col_name}")
 g.tight_layout()
-plt.savefig("global_tflops_facet_compare.png")
+plt.savefig("global_P4_tflops_facet_compare.png")
 plt.close()
 
 
 # -------------------------------------------------------------------
 # 5. GLOBAL LATENCY HEATMAP (device × seq_len)
+# Filter to a consistent precision for a clean comparison (FP32 is safest)
 # -------------------------------------------------------------------
-# Filter to a consistent precision for a clean comparison (e.g., FP32)
+print("Plot 5/7: Latency Heatmap (FP32)...")
 heat_latency_df = lat[lat['precision'] == 'fp32'] 
 heat_latency = heat_latency_df.pivot_table(
     index="device",
@@ -130,14 +131,15 @@ sns.heatmap(
 )
 plt.title("Latency Heatmap (Device × Seq Len) [FP32 Only]")
 plt.tight_layout()
-plt.savefig("global_latency_heatmap_fp32.png")
+plt.savefig("global_P5_latency_heatmap_fp32.png")
 plt.close()
 
 
 # -------------------------------------------------------------------
 # 6. GLOBAL THROUGHPUT HEATMAP
+# Filter to a consistent precision for a clean comparison (FP32 is safest)
 # -------------------------------------------------------------------
-# Filter to a consistent precision for a clean comparison (e.g., FP32)
+print("Plot 6/7: Throughput Heatmap (FP32)...")
 heat_tp_df = lat[lat['precision'] == 'fp32'] 
 heat_tp = heat_tp_df.pivot_table(
     index="device",
@@ -155,13 +157,14 @@ sns.heatmap(
 )
 plt.title("Throughput Heatmap (Device × Seq Len) [FP32 Only]")
 plt.tight_layout()
-plt.savefig("global_throughput_heatmap_fp32.png")
+plt.savefig("global_P6_throughput_heatmap_fp32.png")
 plt.close()
 
 
 # -------------------------------------------------------------------
 # 7. VRAM UTILIZATION (GPU Only)
 # -------------------------------------------------------------------
+print("Plot 7/7: VRAM Utilization...")
 if mem is not None:
     # Filter out non-GPU devices (those with 'Unified Memory')
     mem_gpu = mem[mem["total_vram"] != "Unified Memory"].copy() 
@@ -181,7 +184,12 @@ if mem is not None:
         plt.title("GPU VRAM Utilization (%) Across Devices")
         plt.ylabel("VRAM Used (%)")
         plt.tight_layout()
-        plt.savefig("global_vram_utilization.png")
+        plt.savefig("global_P7_vram_utilization.png")
         plt.close()
+        print("✓ ALL 7 global comparison plots generated successfully!")
+    else:
+        print("Skipping VRAM Utilization Plot: No dedicated VRAM devices found in memory data.")
+else:
+    print("Skipping VRAM Utilization Plot: memory_bottlenecks.csv files not found.")
 
-print("\n✓ GLOBAL COMPARISON PLOTS GENERATED SUCCESSFULLY!")
+print("\nAll global comparison plots saved to the current directory.")

@@ -15,7 +15,7 @@ if not os.path.exists(LAT_FILE):
 
 lat = pd.read_csv(LAT_FILE)
 device_name = lat["device"].iloc[0]
-print("Generating the 5 most meaningful visualizations for:", device_name)
+print(f"Generating the 5 most meaningful visualizations for: {device_name}")
 
 # --- DATA CLEANING AND PRE-CALCULATIONS ---
 lat["seq_len"] = lat["seq_len"].astype(int)
@@ -50,33 +50,41 @@ g.savefig(f"{device_name}_P1_latency_facet_all.png")
 plt.close()
 
 # -------------------------------------------------------------
-# 2. LATENCY HEATMAP (Seq Len x Batch)
-# Best for finding the absolute slowest / fastest combinations.
-# We focus on the worst-case (Large, FP32) or a key case (Base, FP16).
+# 2. MULTI-INDEX LATENCY HEATMAP (ALL VARIABLES)
+# Index: Model Size x Precision. Columns: Batch x Seq Len.
 # -------------------------------------------------------------
-print("Plot 2/5: Latency Heatmap...")
-heat_df = lat[(lat["model_size"] == "Base") & (lat["precision"] == "fp32")]
-heat = heat_df.pivot_table(
-    index="batch",
-    columns="seq_len",
+print("Plot 2/5: Comprehensive Latency Heatmap (All Configs)...")
+
+# Pivot table structure:
+# Rows: Combination of Model Size and Precision
+# Columns: Combination of Batch and Sequence Length
+heat_all_df = lat.pivot_table(
+    index=["model_size", "precision"],
+    columns=["batch", "seq_len"],
     values="mean_latency_sec"
 )
 
-plt.figure(figsize=(10,6))
+# Flatten the multi-index columns for cleaner heatmap labels (e.g., B1_S196)
+heat_all_df.columns = [f'B{b}_S{s}' for b, s in heat_all_df.columns]
+
+plt.figure(figsize=(14, 8))
 sns.heatmap(
-    heat,
+    heat_all_df,
     annot=True,
-    fmt=".2f",
+    fmt=".3f", # Show 3 decimal places for better precision
     cmap="YlOrRd",
     linewidths=.5,
+    linecolor='black', # Add line color for better separation
     cbar_kws={'label': 'Mean Latency (s)'}
 )
-plt.title(f"{device_name} — Latency Heatmap (Base Model, FP32)")
-plt.xlabel("Sequence Length")
-plt.ylabel("Batch Size")
+plt.title(f"{device_name} — Comprehensive Latency Heatmap (s) (All Configurations)")
+plt.xlabel("Configuration (Batch Size_Sequence Length)")
+plt.ylabel("Model Size & Precision")
 plt.tight_layout()
-plt.savefig(f"{device_name}_P2_latency_heatmap.png")
+plt.savefig(f"{device_name}_P2_latency_heatmap_all.png")
 plt.close()
+
+
 
 # -------------------------------------------------------------
 # 3. TFLOPS HEATMAP
@@ -133,20 +141,18 @@ plt.close()
 
 
 # -------------------------------------------------------------
-# 5. MEMORY UTILIZATION BAR CHART
+# 5. MEMORY UTILIZATION BAR CHART (if data exists)
 # Crucial for identifying memory bottlenecks on CUDA/VRAM devices.
 # -------------------------------------------------------------
 print("Plot 5/5: Memory Utilization...")
 if os.path.exists(MEM_FILE):
     mem = pd.read_csv(MEM_FILE)
 
-    # --- Memory Data Cleaning ---
     if "utilization_pct" in mem.columns:
         mem = mem.copy()
-        # Clean data that might contain 'N/A' or 'MiB' (only clean 'utilization_pct' here)
         mem["util"] = mem["utilization_pct"].astype(str).str.replace("%", "").str.strip()
         mem["util"] = pd.to_numeric(mem["util"], errors="coerce")
-        mem.dropna(subset=['util'], inplace=True) # Remove non-CUDA/MPS entries
+        mem.dropna(subset=['util'], inplace=True) # Remove non-numeric entries (e.g., Unified Memory)
 
         if not mem.empty:
             plt.figure(figsize=(10,6))
@@ -168,9 +174,10 @@ if os.path.exists(MEM_FILE):
         else:
             print("Skipping Memory Plot: Data in memory_bottlenecks.csv is not numeric (e.g., CPU/MPS only).")
     else:
-        print(f"Skipping Memory Plot: '{MEM_FILE}' exists but missing 'utilization_pct' column (e.g., CPU/MPS only).")
-
+        print("Skipping Memory Plot: memory_bottlenecks.csv is missing 'utilization_pct' column.")
 else:
     print(f"Skipping Memory Plot: '{MEM_FILE}' not found. Generating 4 focused visualizations.")
 
-print("\nAll required visualizations saved to the current directory.")
+print("\nAll individual plots saved to the current directory.")
+
+# ---
