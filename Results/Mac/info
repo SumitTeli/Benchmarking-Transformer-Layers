@@ -1,0 +1,19 @@
+===== SYSTEM INFORMATION =====
+OS: Darwin 24.5.0
+Machine: arm64
+
+===== CPU =====
+CPU Model: Apple M3 Pro
+Cores: 11 physical / 11 logical
+
+===== MEMORY =====
+Total RAM: 18.0 GB
+
+===== GPU =====
+CUDA Available: NO
+
+===== APPLE SILICON (MPS) =====
+MPS Available: YES
+Running on: Apple Silicon GPU (M1/M2/M3)
+
+(base) sumitteli@Mac-9492 Benchmarking-Transformer-Layers % ;2A
