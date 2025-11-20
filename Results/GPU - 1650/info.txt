@@ -1,0 +1,18 @@
+===== SYSTEM INFORMATION =====
+OS: Windows 11
+Machine: AMD64
+
+===== CPU =====
+CPU Model: Intel64 Family 6 Model 165 Stepping 2, GenuineIntel
+Cores: 4 physical / 8 logical
+
+===== MEMORY =====
+Total RAM: 15.87 GB
+
+===== GPU =====
+CUDA Available: YES (1 GPU(s))
+
+GPU #0: NVIDIA GeForce GTX 1650
+  CUDA Capability: (7, 5)
+  VRAM: 4.0 GB
+  Multiprocessors: 14
